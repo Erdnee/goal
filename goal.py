@@ -129,7 +129,7 @@ def finish_episode(policy):
         R = r + GAMMA * R
         Gt.insert(0, R)
     Gt = torch.tensor(Gt)
-    # Gt = (Gt - Gt.mean()) / (Gt.std() + eps)
+    Gt = (Gt - Gt.mean()) / (Gt.std() + eps)
 
     for log_prob, R in zip(policy.log_probs, Gt):
         policy_loss.append(-log_prob * R)

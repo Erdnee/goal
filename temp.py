@@ -24,16 +24,16 @@ class Env:
         random.seed()
         self.done = False
         self.bounty = bounty
-        self.threshold = threshold#10 in this case
-        self.action = -1 #index of actions taken
+        self.threshold = threshold#what is that?
+        self.action = -1 #index of taken action
+        #0 = left, 1 = down, 2 = right, 3 = up
         self.row_size = n
         self.col_size = m
         
-        self.move = [[0, 1], [0, -1], [1, 0], [-1, 0]]
-        #generating n*m matrix with random values between 1 to 10
-        #no negative values at first
-        self.initial_grid = np.random.randint(-5,5, size=(n, m))
-        self.grid = self.initial_grid.copy()
+        self.move = [[-1, 0], [0, -1], [1, 0], [1, 0]]
+        #generating n*m matrix with random values between -5 to 5
+        self.tiles = np.random.randint(-5,5, size=(n, m))
+        self.grid = np.zeros((n, m)) 
         #location of start
         self.sx = 0
         self.sy = 0
@@ -44,7 +44,7 @@ class Env:
         
     def reset(self):
         self.done = False
-        self.grid = self.initial_grid.copy()
+        self.grid = np.zeros((self.row_size, self.col_size))
         t = random.randint(0, self.row_size * self.col_size - 1)
         self.sx = t // self.col_size;
         self.sy = t % self.col_size;
@@ -55,18 +55,25 @@ class Env:
         if self.sx == self.dx and self.sy == self.dy:
             self.reset()
 
-        self.grid[self.sx][self.sy] = 11
-        self.grid[self.dx][self.dy] = 12
+        self.grid[self.sx][self.sy] = 1
+        self.grid[self.dx][self.dy] = 2
         return self.grid
 
     def render(self):
-        print("===========================================")
+        print("<=========================================>")
         print('Applied action: {:d}\n'.format(self.action))
+        print("===================Grid===================")
         for i in range(0, self.row_size):
             for j in range(0, self.col_size):
                 print('{:2d} '.format(int(self.grid[i][j])), end = '')
             print('');
-        print("===========================================")
+        
+        print("===================tiles===================")
+        for i in range(0, self.row_size):
+            for j in range(0, self.col_size):
+                print('{:2d} '.format(int(self.tiles[i][j])), end = '')
+            print('');
+        print("<=========================================>")
         input()
 
     def step(self,n):
@@ -76,13 +83,12 @@ class Env:
         y += self.move[n][1]
         
         if x < 0 or y < 0 or x >= self.row_size or y >= self.col_size:
-            reward = -10
+            reward = -6
             return self.grid, reward, False
-        else:
-            reward = self.grid[x][y] - 10
-        self.grid[self.sx][self.sy] = self.initial_grid[self.sx][self.sy]
+        reward = self.tiles[x][y]
+        self.grid[self.sx][self.sy] = 0
 
-        self.grid[x][y] = 11
+        self.grid[x][y] = 1
         
         if x == self.dx and y == self.dy:
             self.done = True
@@ -108,14 +114,13 @@ class PolicyNetwork(nn.Module):
         x = F.relu(self.linear1(state.view(-1)))
         x = self.linear2(x)
         x = self.logsoftmax(x)
-        # print(x)
+        #print(x)
         return x 
 
 
 policy = PolicyNetwork(5*5, 4, 128)
-env = Env(5, 5, 10)
-optimizer = optim.SGD(policy.parameters(), lr=1e-3)
-
+env = Env(5, 5, 50)
+optimizer = optim.SGD(policy.parameters(), lr=1e-2)
 def select_action(state):
     state = torch.from_numpy(state).float()
     probs = policy(state)
@@ -149,7 +154,7 @@ def finish_episode(policy):
 
 def main():
                       
-    # running_reward = 10
+    running_reward = 10
     for i_episode in count(1):
         state, ep_reward = env.reset(), 0
         for t in range(1, DEPTH): 
@@ -160,18 +165,18 @@ def main():
                 env.render()
             policy.rewards.append(reward)
             ep_reward += reward
+            running_reward = alpha * ep_reward + (1 - alpha) * running_reward
             if done:
                 break
             print('run: {:d} / 100000 ({:d}%)\r'.format(i_episode, int(i_episode / 100000 * 100)), end = '')
             # print('run: ', i_episode,)
 
-        # running_reward = alpha * ep_reward + (1 - alpha) * running_reward
         finish_episode(policy)
-        # if running_reward > env.threshold:
-        #     print("Solved! Running reward is now {} and "
-        #           "the last episode runs to {} time steps!".format(running_reward, t))
-        #     break
-
+        if running_reward > env.threshold:
+            print("Solved! Running reward is now {} and "
+                  "the last episode runs to {} time steps!".format(running_reward, t))
+            break
+    with open("policy_tiles","wb") as file:
+        pickle.dump(policy,file)
 if __name__ == '__main__':
-    main()
-
+   main()
