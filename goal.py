@@ -110,7 +110,7 @@ class PolicyNetwork(nn.Module):
         return x 
 
 
-policy = PolicyNetwork(5*5, 4, 128)
+policy = PolicyNetwork(5*5*5*5, 4, 128)
 env = Env(5, 5, 10)
 optimizer = optim.SGD(policy.parameters(), lr=1e-2)
 

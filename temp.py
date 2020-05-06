@@ -5,19 +5,21 @@ import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
+import pickle
+from pynput import keyboard
 # import matplotlib.pyplot as plt
 from itertools import count
 
 GAMMA = 0.9
 eps = np.finfo(np.float32).eps.item()
 DEPTH = 15
-alpha = 0.05
+alpha = 0.2
 
 # Now generating random field filled with numbers between 1 to 9
 # Reset only changes locations of s and d 
 # Changed reward system on Env.step
 class Env:
-    def __init__(self,n, m, threshold, bounty = 100):
+    def __init__(self,n, m, threshold, bounty = 50):
         #gives the previous generated random number 
         #for next usage of random
         #or IDK
@@ -30,10 +32,10 @@ class Env:
         self.row_size = n
         self.col_size = m
         
-        self.move = [[-1, 0], [0, -1], [1, 0], [1, 0]]
+        self.move = [[-1, 0], [0, -1], [0, 1], [1, 0]]
         #generating n*m matrix with random values between -5 to 5
-        self.tiles = np.random.randint(-5,5, size=(n, m))
-        self.grid = np.zeros((n, m)) 
+        self.tiles = np.array((-5,1,5,-4,3,2,-1,-2,-3,1,0,3,-4,4,1,-2,-1,1,0,4,3,2,-4,2,-5)).reshape(5,5)
+        self.grid = np.copy(self.tiles)
         #location of start
         self.sx = 0
         self.sy = 0
@@ -44,7 +46,7 @@ class Env:
         
     def reset(self):
         self.done = False
-        self.grid = np.zeros((self.row_size, self.col_size))
+        self.grid = np.copy(self.tiles)
         t = random.randint(0, self.row_size * self.col_size - 1)
         self.sx = t // self.col_size;
         self.sy = t % self.col_size;
@@ -55,8 +57,8 @@ class Env:
         if self.sx == self.dx and self.sy == self.dy:
             self.reset()
 
-        self.grid[self.sx][self.sy] = 1
-        self.grid[self.dx][self.dy] = 2
+        self.grid[self.sx][self.sy] = -6
+        self.grid[self.dx][self.dy] = self.bounty
         return self.grid
 
     def render(self):
@@ -85,10 +87,12 @@ class Env:
         if x < 0 or y < 0 or x >= self.row_size or y >= self.col_size:
             reward = -6
             return self.grid, reward, False
-        reward = self.tiles[x][y]
-        self.grid[self.sx][self.sy] = 0
+        if(self.grid[x][y] != -6):
+            reward = self.tiles[x][y]
+        else:
+            reward = -6
 
-        self.grid[x][y] = 1
+        self.grid[x][y] = -6
         
         if x == self.dx and y == self.dy:
             self.done = True
@@ -112,9 +116,11 @@ class PolicyNetwork(nn.Module):
    
     def forward(self, state):
         x = F.relu(self.linear1(state.view(-1)))
+        # print("x = linear1 * state",x)
         x = self.linear2(x)
+        # print("x = linear2 * x",x)
         x = self.logsoftmax(x)
-        #print(x)
+        # print("x = logsoftmax(x)",x)
         return x 
 
 
@@ -154,29 +160,51 @@ def finish_episode(policy):
 
 def main():
                       
-    running_reward = 10
+    running_reward = 0
+    listener = keyboard.Listener(on_press=on_press)
+    listener.start()
     for i_episode in count(1):
         state, ep_reward = env.reset(), 0
         for t in range(1, DEPTH): 
             action = select_action(state)
             state, reward, done = env.step(action)
-
-            if i_episode >= 100000:
-                env.render()
+            
+            if(i_episode % 100000 == 0):
+                listener.join()
+                print("episode ",i_episode," is running do you want to save a model?")
+                print("press 'y' if you want to save the model")
+            # if i_episode >= 100000:
+            #     env.render()
             policy.rewards.append(reward)
             ep_reward += reward
-            running_reward = alpha * ep_reward + (1 - alpha) * running_reward
+            running_reward = (1 - alpha) * ep_reward + alpha * running_reward
             if done:
                 break
-            print('run: {:d} / 100000 ({:d}%)\r'.format(i_episode, int(i_episode / 100000 * 100)), end = '')
-            # print('run: ', i_episode,)
+            # print('running: {:d} samples\r'.format(i_episode), end = '')
+            print('run: ', i_episode)
+            print('episode reward: ', ep_reward)
 
         finish_episode(policy)
         if running_reward > env.threshold:
             print("Solved! Running reward is now {} and "
                   "the last episode runs to {} time steps!".format(running_reward, t))
+            print("press 'y' if you want to save the model")
+            listener = keyboard.Listener(on_press=on_press)
+            listener.join()
             break
-    with open("policy_tiles","wb") as file:
-        pickle.dump(policy,file)
+    
+
+
+def on_press(key):
+    try:
+        k = key.char  
+    except:
+        k = key.name  
+    if k == 'y':  
+        with open("policy_temp.pickle","wb") as file:
+            pickle.dump(policy,file)
+            print("---------------created dump---------------")
+    return False  # stop listener; remove this if want more keys
+
 if __name__ == '__main__':
    main()
