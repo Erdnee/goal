@@ -60,6 +60,7 @@ class Env:
             reward = -5
             return self.sx * self.row_size + self.sy, reward
         reward = self.tiles[x,y]
+        self.tiles[self.sx][self.sy] = -1
         self.grid[self.sx][self.sy] = 0
         # TODO: daraa ni ywsan zam deeree dahij ywbal reward baihgvi
         # uuruur helbel tiles[self.sx][self.sy]-g 0 bolgono
@@ -76,15 +77,14 @@ def training():
     q_table = np.zeros((env.row_size*env.col_size,len(env.action_space)))
     # row_n = n,x col_n = m,y
     learning_rate = 0.07
-    discount = 0.99
+    discount = 0.9
     max_steps = 25
-
+    times_won = 0
     epsilon = 1
     max_epsilon = 1
     min_epsilon = 0.01
     epsilon_decay = 0.001
 
-    times_won = 0
     for episode in count(1):
         state = env.reset()
         step = 0
@@ -108,15 +108,15 @@ def training():
             if episode_reward > 30:
                 times_won += 1
                 break
+
             epsilon = min_epsilon + (max_epsilon - min_epsilon) * np.exp(-epsilon_decay*episode) 
-        print('run: {:d} ({:d})\r'.format(episode, times_won), end = '')
-        if(times_won == 100):
-            print(episode)
+        if(times_won == 30):
             break
-    np.savetxt("q_table_temp2.txt",q_table)
+        print(episode)
+    np.savetxt("q_table_temp3.txt",q_table)
 def testing():
     env = Env(5,5)
-    q_table = np.loadtxt('q_table_temp2.txt', dtype = float)
+    q_table = np.loadtxt('q_table_temp3.txt', dtype = float)
 
     total_test_episodes = 100
     max_steps = 25
